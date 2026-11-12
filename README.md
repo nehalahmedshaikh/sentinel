@@ -84,3 +84,5 @@ Integration tests use only `SENTINEL_TEST_DATABASE_URL` and refuse connections u
 - [Architecture decisions](docs/decisions/README.md)
 - [Initial architecture decisions](docs/decisions/0001-foundational-architecture.md)
 - [Coding agent instructions](AGENTS.md)
+- [Phase 2: Data quality detection](docs/PHASE_02_DATA_QUALITY.md)
+- [Data quality rule engine decision](docs/decisions/0002-data-quality-rule-engine.md)
