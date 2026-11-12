@@ -4,15 +4,23 @@ from uuid import uuid4
 
 import polars as pl
 import pytest
+from pydantic import TypeAdapter
 
 from sentinel.quality.aggregation import assessment_summary, rule_snapshot, ruleset_fingerprint
 from sentinel.quality.contracts import (
     QualityRuleInput,
     ResultStatus,
+    RuleParameters,
     RuleType,
     Severity,
 )
 from sentinel.quality.engine import evaluate_rule
+
+_RULE_PARAMETERS = TypeAdapter(RuleParameters)
+
+
+def rule_parameters(value: dict[str, object]) -> RuleParameters:
+    return _RULE_PARAMETERS.validate_python(value)
 
 
 def rule(
@@ -24,7 +32,7 @@ def rule(
     return QualityRuleInput(
         name=f"test {kind.value}",
         rule_type=kind,
-        parameters={"kind": kind.value, **parameters},
+        parameters=rule_parameters({"kind": kind.value, **parameters}),
         severity=severity,
     )
 
@@ -39,10 +47,12 @@ def test_rule_parameter_contracts_reject_invalid_bounds_and_shapes() -> None:
     with pytest.raises(ValueError):
         rule(RuleType.MIN_VALUE, {"column_name": "x", "minimum": 0, "extra": 1})
     with pytest.raises(ValueError):
-        QualityRuleInput(
-            name="mismatch",
-            rule_type=RuleType.MIN_VALUE,
-            parameters={"kind": "max_value", "column_name": "x", "maximum": 3},
+        QualityRuleInput.model_validate(
+            {
+                "name": "mismatch",
+                "rule_type": RuleType.MIN_VALUE,
+                "parameters": {"kind": "max_value", "column_name": "x", "maximum": 3},
+            }
         )
 
 

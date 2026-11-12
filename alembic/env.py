@@ -6,6 +6,7 @@ from sqlalchemy import engine_from_config, pool
 from sentinel.config import database_url
 from sentinel.persistence.models import Base
 from sentinel.quality import models as quality_models  # noqa: F401
+from sentinel.reliability import models as reliability_models  # noqa: F401
 
 config = context.config
 target_metadata = Base.metadata

@@ -12,6 +12,8 @@ dependencies = [
     "polars>=2.1.0",
     "psycopg[binary]>=3.3.9",
     "pydantic>=2.14.3",
+    "scikit-learn>=1.9.1",
+    "scipy>=1.18.1",
     "sqlalchemy>=2.1.8",
 ]
 

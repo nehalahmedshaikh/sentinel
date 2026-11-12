@@ -1,6 +1,7 @@
 """PostgreSQL integration coverage; uses only sentinel_test."""
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from uuid import uuid4
 
@@ -14,7 +15,7 @@ from sentinel.storage.filesystem import FileStore
 
 
 @pytest.fixture
-def service(tmp_path: Path):
+def service(tmp_path: Path) -> Iterator[DatasetService]:
     url = os.getenv("SENTINEL_TEST_DATABASE_URL")
     if not url:
         pytest.skip("SENTINEL_TEST_DATABASE_URL is not configured")

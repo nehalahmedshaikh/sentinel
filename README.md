@@ -48,7 +48,7 @@ The system should be useful independently of its AI capabilities. Statistical fi
 
 ## Project status
 
-**Phases 1 and 2 implemented.** Sentinel supports dataset registration, immutable ingestion versions, managed source snapshots, schema fingerprints, deterministic statistical profiles, configurable dataset quality rules, and persistent assessments. Drift, anomaly detection, investigation, incidents, APIs and background processing remain future phases.
+**Phases 1, 2, and 3 implemented.** Sentinel supports dataset registration, immutable ingestion versions, managed source snapshots, deterministic profiling and quality assessments, schema and distribution drift, configurable anomaly detection, historical baselines, and deterministic investigations. Incident management, APIs, and background processing remain future phases.
 
 ## Development
 
@@ -99,6 +99,49 @@ assessment = quality.evaluate_version(dataset_version_id)
 
 Use `get_rules`, `update_rule`, `set_rule_enabled`, and `delete_rule` to manage expectations. Rules with historical findings cannot be deleted; disable them instead. Use `retrieve_assessment`, `retrieve_findings`, or `assessment_history` to read persisted results. Null checks do not treat NaN as null; uniqueness treats all nulls as one distinct value; accepted-values rules treat null as unaccepted. Row-dependent rules report ERROR for empty datasets. An empty enabled ruleset also returns ERROR with a message stating that no assertions ran. Numeric summaries exclude NaN from observed finite bounds and count NaN as violating numeric predicates.
 
+## Reliability intelligence
+
+Create and manage a dataset-specific policy with `ReliabilityService.create_policy`, `get_policies`, `update_policy`, and `set_policy_enabled`. A typical configuration explicitly enables multivariate detection:
+
+```python
+from sentinel.reliability.contracts import (
+    DetectionPolicyConfig,
+    DetectionPolicyInput,
+    MultivariateAnomalyPolicy,
+    NumericDriftPolicy,
+    ReliabilityAssessmentInput,
+    BaselineStrategy,
+)
+from sentinel.reliability.service import ReliabilityService
+
+reliability = ReliabilityService(session, file_store)
+policy = reliability.create_policy(
+    "customer-transactions",
+    DetectionPolicyInput(
+        name="production defaults",
+        config=DetectionPolicyConfig(
+            numeric_drift=NumericDriftPolicy(psi_threshold=0.2),
+            multivariate_anomaly=MultivariateAnomalyPolicy(enabled=True),
+        ),
+    ),
+)
+result = reliability.run_assessment(
+    ReliabilityAssessmentInput(
+        dataset_version_id=dataset_version_id,
+        policy_id=policy.id,
+        baseline_strategy=BaselineStrategy.PREVIOUS,
+    )
+)
+```
+
+The baseline strategies are `previous`, `initial`, `rolling` (requires `rolling_window`), and `explicit` (requires a same-dataset `explicit_baseline_version_id`). Rolling comparisons pool the selected preceding versions in ascending version order using Polars `diagonal_relaxed` concatenation for distribution metrics; schema comparison uses the newest selected baseline version. The target is excluded from baseline selection. The first version receives a persisted `NO_BASELINE` assessment while target-only anomaly detectors may still run.
+
+Numeric drift reports two-sample KS statistic/p-value, PSI, and raw-unit Wasserstein distance. PSI uses quantile cut points from the baseline; duplicate cut points collapse to fewer bins, while a constant baseline uses match/non-match bins. Categorical drift reports base-2 Jensen–Shannon divergence (squared SciPy distance, range 0–1) and category-based PSI. Nulls are excluded from distribution metrics but their counts are recorded; numeric NaN and infinities are excluded and counted. Practical thresholds determine DETECTED independently of KS significance. Wasserstein thresholds use the feature's original units and should be tuned to that feature.
+
+Numeric univariate anomalies use IQR fences or modified Z-scores. Categorical anomalies hash rare category labels before storing evidence. Isolation Forest and LOF are disabled by default; when enabled, preprocessing selects numeric columns in source order up to `max_features`, removes all-null/constant columns, median-imputes missing/non-finite values, and applies `StandardScaler`. Anomaly evidence stores at most 20 row indices and aggregate counts, not full records. `assessment_history` retrieves persisted trends and `change_onset` finds the earliest assessment with a matching detected finding. `investigate(version_id)` joins reliability evidence with persisted Phase 2 quality assessments and reports co-occurrence as correlation, never causation.
+
+Migration `0003_reliability_intelligence` adds policy, assessment, and finding tables. Apply with `uv run alembic upgrade head` only after setting `SENTINEL_DATABASE_URL` to the intended database. PostgreSQL integration tests require migrations to be present in the database named `sentinel_test`.
+
 ## Documentation
 
 - [Project specification](docs/PROJECT_SPEC.md)
@@ -109,3 +152,5 @@ Use `get_rules`, `update_rule`, `set_rule_enabled`, and `delete_rule` to manage 
 - [Coding agent instructions](AGENTS.md)
 - [Phase 2: Data quality detection](docs/PHASE_02_DATA_QUALITY.md)
 - [Data quality rule engine decision](docs/decisions/0002-data-quality-rule-engine.md)
+- [Phase 3: Data Reliability Intelligence](docs/PHASE_03_RELIABILITY_INTELLIGENCE.md)
+- [ADR 0003: Data Reliability Intelligence](docs/decisions/0003-reliability-intelligence.md)

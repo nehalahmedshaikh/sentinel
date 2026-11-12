@@ -1,25 +1,41 @@
 """PostgreSQL persistence tests for quality rule histories."""
 
 import os
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import polars as pl
 import pytest
-from sqlalchemy import text
+from pydantic import TypeAdapter
+from sqlalchemy import Engine, text
 
 from sentinel.domain.contracts import DatasetInput
 from sentinel.domain.exceptions import RuleConflictError
 from sentinel.ingestion.service import DatasetService
 from sentinel.persistence.database import create_database_engine, session_factory
-from sentinel.quality import service as quality_service_module
-from sentinel.quality.contracts import QualityRuleInput, ResultStatus, RuleType, Severity
+from sentinel.quality.contracts import (
+    FindingResult,
+    QualityRuleInput,
+    ResultStatus,
+    RuleParameters,
+    RuleType,
+    Severity,
+)
+from sentinel.quality.engine import evaluate_rule
 from sentinel.quality.service import QualityService
 from sentinel.storage.filesystem import FileStore
 
+_RULE_PARAMETERS = TypeAdapter(RuleParameters)
+
+
+def rule_parameters(value: dict[str, object]) -> RuleParameters:
+    return _RULE_PARAMETERS.validate_python(value)
+
 
 @pytest.fixture
-def engine():
+def engine() -> Iterator[Engine]:
     if not os.getenv("SENTINEL_TEST_DATABASE_URL"):
         pytest.skip("SENTINEL_TEST_DATABASE_URL is not configured")
     database_engine = create_database_engine(testing=True)
@@ -32,7 +48,7 @@ def engine():
     database_engine.dispose()
 
 
-def _ingest_version(engine, tmp_path: Path) -> tuple[str, UUID, FileStore]:
+def _ingest_version(engine: Engine, tmp_path: Path) -> tuple[str, UUID, FileStore]:
     slug = f"quality-{uuid4().hex}"
     source = tmp_path / "quality.csv"
     source.write_text("id,status,amount\n1,ok,10\n2,,20\n3,invalid,-1\n", encoding="utf-8")
@@ -44,7 +60,7 @@ def _ingest_version(engine, tmp_path: Path) -> tuple[str, UUID, FileStore]:
     return slug, registration.version.id, storage
 
 
-def test_rule_lifecycle_assessments_history_and_idempotency(engine, tmp_path: Path) -> None:
+def test_rule_lifecycle_assessments_history_and_idempotency(engine: Engine, tmp_path: Path) -> None:
     slug, version_id, storage = _ingest_version(engine, tmp_path)
     with session_factory(engine)() as session:
         service = QualityService(session, storage)
@@ -53,7 +69,7 @@ def test_rule_lifecycle_assessments_history_and_idempotency(engine, tmp_path: Pa
             QualityRuleInput(
                 name="status required",
                 rule_type=RuleType.NOT_NULL,
-                parameters={"kind": "not_null", "column_name": "status"},
+                parameters=rule_parameters({"kind": "not_null", "column_name": "status"}),
                 severity=Severity.WARNING,
             ),
         )
@@ -62,7 +78,9 @@ def test_rule_lifecycle_assessments_history_and_idempotency(engine, tmp_path: Pa
             QualityRuleInput(
                 name="status set",
                 rule_type=RuleType.ACCEPTED_VALUES,
-                parameters={"kind": "accepted_values", "column_name": "status", "values": ["ok"]},
+                parameters=rule_parameters(
+                    {"kind": "accepted_values", "column_name": "status", "values": ["ok"]}
+                ),
             ),
         )
         assert len(service.get_rules(slug)) == 2
@@ -81,7 +99,7 @@ def test_rule_lifecycle_assessments_history_and_idempotency(engine, tmp_path: Pa
             QualityRuleInput(
                 name="status required",
                 rule_type=RuleType.NOT_NULL,
-                parameters={"kind": "not_null", "column_name": "status"},
+                parameters=rule_parameters({"kind": "not_null", "column_name": "status"}),
                 severity=Severity.CRITICAL,
             ),
         )
@@ -102,7 +120,7 @@ def test_rule_lifecycle_assessments_history_and_idempotency(engine, tmp_path: Pa
         assert {item.id for item in service.get_rules(slug)} == {not_null.id, accepted.id}
 
 
-def test_concurrent_assessment_requests_return_same_record(engine, tmp_path: Path) -> None:
+def test_concurrent_assessment_requests_return_same_record(engine: Engine, tmp_path: Path) -> None:
     slug, version_id, storage = _ingest_version(engine, tmp_path)
     with session_factory(engine)() as session:
         QualityService(session, storage).create_rule(
@@ -110,11 +128,11 @@ def test_concurrent_assessment_requests_return_same_record(engine, tmp_path: Pat
             QualityRuleInput(
                 name="ids unique",
                 rule_type=RuleType.UNIQUE,
-                parameters={"kind": "unique", "column_name": "id"},
+                parameters=rule_parameters({"kind": "unique", "column_name": "id"}),
             ),
         )
 
-    def evaluate_once():
+    def evaluate_once() -> UUID:
         with session_factory(engine)() as session:
             return QualityService(session, storage).evaluate_version(version_id).assessment.id
 
@@ -124,7 +142,7 @@ def test_concurrent_assessment_requests_return_same_record(engine, tmp_path: Pat
 
 
 def test_unexpected_rule_failure_is_recorded_without_dropping_other_findings(
-    engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     slug, version_id, storage = _ingest_version(engine, tmp_path)
     with session_factory(engine)() as session:
@@ -134,7 +152,7 @@ def test_unexpected_rule_failure_is_recorded_without_dropping_other_findings(
             QualityRuleInput(
                 name="will raise",
                 rule_type=RuleType.NOT_NULL,
-                parameters={"kind": "not_null", "column_name": "status"},
+                parameters=rule_parameters({"kind": "not_null", "column_name": "status"}),
             ),
         )
         service.create_rule(
@@ -142,17 +160,16 @@ def test_unexpected_rule_failure_is_recorded_without_dropping_other_findings(
             QualityRuleInput(
                 name="id required",
                 rule_type=RuleType.REQUIRED_COLUMN,
-                parameters={"kind": "required_column", "column_name": "id"},
+                parameters=rule_parameters({"kind": "required_column", "column_name": "id"}),
             ),
         )
-    original = quality_service_module.evaluate_rule
 
-    def failing_evaluator(rule, frame):
+    def failing_evaluator(rule: QualityRuleInput, frame: pl.DataFrame) -> FindingResult:
         if rule.name == "will raise":
             raise RuntimeError("simulated evaluator failure")
-        return original(rule, frame)
+        return evaluate_rule(rule, frame)
 
-    monkeypatch.setattr(quality_service_module, "evaluate_rule", failing_evaluator)
+    monkeypatch.setattr("sentinel.quality.service.evaluate_rule", failing_evaluator)
     with session_factory(engine)() as session:
         result = QualityService(session, storage).evaluate_version(version_id)
     assert result.assessment.status == ResultStatus.ERROR
