@@ -48,9 +48,7 @@ The system should be useful independently of its AI capabilities. Statistical fi
 
 ## Project status
 
-**Pre-implementation.**
-
-The project is currently undergoing foundational setup and architectural specification. Planned capabilities are not yet implemented.
+**Phase 1 implemented: dataset foundation.** Sentinel supports dataset registration, immutable ingestion versions, managed source snapshots, schema fingerprints, and deterministic statistical profiles. Detection, investigation, incidents, APIs and background processing remain future phases.
 
 ## Development
 
@@ -65,6 +63,18 @@ uv run mypy src
 ```
 
 See [AGENTS.md](AGENTS.md) for engineering instructions and [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) for the project scope and architectural direction.
+
+## Dataset foundation
+
+Set `SENTINEL_DATABASE_URL` to a PostgreSQL connection and optionally set `SENTINEL_DATA_DIR` (defaults to `~/.local/share/sentinel`). Initialize an empty database with:
+
+```bash
+uv run alembic upgrade head
+```
+
+The application service is `sentinel.ingestion.service.DatasetService`; construct it with a SQLAlchemy session and `FileStore`. Register with a validated `DatasetInput`, ingest with `service.ingest(Path("data.csv"), dataset_input)`, then retrieve using `retrieve_dataset`, `retrieve_versions` or `retrieve_version`. Supported files are comma-delimited header CSV, Parquet, JSON arrays of objects, and JSON Lines/NDJSON. Profiles are eager Polars calculations; the complete frame is loaded into memory. Floating NaN and infinite values are excluded from numeric minimum, maximum, mean and standard deviation; null counts remain distinct from NaN.
+
+Integration tests use only `SENTINEL_TEST_DATABASE_URL` and refuse connections unless PostgreSQL reports the database name `sentinel_test`. Apply migrations to that database before running them.
 
 ## Documentation
 
