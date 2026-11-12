@@ -7,7 +7,13 @@ authors = [
     { name = "nehalahmedshaikh", email = "nehalahmedshaikh@gmail.com" }
 ]
 requires-python = ">=3.14,<3.15"
-dependencies = []
+dependencies = [
+    "alembic>=1.20.1",
+    "polars>=2.1.0",
+    "psycopg[binary]>=3.3.9",
+    "pydantic>=2.14.3",
+    "sqlalchemy>=2.1.8",
+]
 
 [project.scripts]
 sentinel = "sentinel:main"

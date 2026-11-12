@@ -248,30 +248,38 @@ This is a logical architecture, not a commitment to a particular deployment topo
 
 ## 7. Technology direction
 
-These are candidates, not irrevocable decisions.
+### Established decisions
 
-| Concern | Candidate |
+| Concern | Technology |
 |---|---|
-| Language | Python |
-| Package and environment management | uv |
-| API | FastAPI |
-| Data processing | Polars or pandas |
-| Validation and domain schemas | Pydantic |
-| Statistical analysis | SciPy |
-| Machine learning | scikit-learn |
-| Database | PostgreSQL |
-| ORM | SQLAlchemy |
-| Migrations | Alembic |
+| Language | Python 3.14 |
+| Environment and package management | uv |
+| Data processing | Polars |
+| Domain and application contracts | Pydantic |
+| Persistence | PostgreSQL |
+| ORM | SQLAlchemy 2.x |
+| Database migrations | Alembic |
+| PostgreSQL driver | Psycopg 3 |
 | Testing | pytest |
 | Linting and formatting | Ruff |
 | Static typing | mypy |
+
+### Deferred decisions
+
+| Concern | Candidate |
+|---|---|
+| API | FastAPI |
+| Statistical analysis | SciPy, where needed |
+| Machine learning | scikit-learn |
 | Background processing | To be evaluated |
 | Containerisation | Docker |
 | CI | GitHub Actions |
-| Documentation | Markdown initially; documentation site later |
-| LLM integration | Provider-independent interface, implementation later |
+| Documentation site | MkDocs |
+| LLM integration | Provider-independent interface |
 
-Every major technology choice should be supported by a documented rationale.
+Deferred technologies should be introduced only when an implementation requirement justifies them.
+
+See `docs/decisions/` for the rationale behind accepted architectural decisions.
 
 ## 8. Non-functional requirements
 

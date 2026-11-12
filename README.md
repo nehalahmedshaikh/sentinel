@@ -65,3 +65,12 @@ uv run mypy src
 ```
 
 See [AGENTS.md](AGENTS.md) for engineering instructions and [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) for the project scope and architectural direction.
+
+## Documentation
+
+- [Project specification](docs/PROJECT_SPEC.md)
+- [Development setup](docs/DEVELOPMENT.md)
+- [Phase 1: Dataset foundation](docs/PHASE_01_DATASET_FOUNDATION.md)
+- [Architecture decisions](docs/decisions/README.md)
+- [Initial architecture decisions](docs/decisions/0001-foundational-architecture.md)
+- [Coding agent instructions](AGENTS.md)
