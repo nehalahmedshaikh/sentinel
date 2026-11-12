@@ -23,3 +23,19 @@ class StorageError(SentinelError):
 
 class PersistenceError(SentinelError):
     """Metadata persistence failed."""
+
+
+class RuleConflictError(SentinelError):
+    """A quality rule conflicts with an existing rule."""
+
+
+class QualityRuleNotFoundError(SentinelError):
+    """A requested quality rule does not exist."""
+
+
+class AssessmentNotFoundError(SentinelError):
+    """A requested quality assessment does not exist."""
+
+
+class RuleDefinitionError(ValidationError):
+    """A quality rule has an invalid type or configuration."""

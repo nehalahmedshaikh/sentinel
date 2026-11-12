@@ -48,7 +48,7 @@ The system should be useful independently of its AI capabilities. Statistical fi
 
 ## Project status
 
-**Phase 1 implemented: dataset foundation.** Sentinel supports dataset registration, immutable ingestion versions, managed source snapshots, schema fingerprints, and deterministic statistical profiles. Detection, investigation, incidents, APIs and background processing remain future phases.
+**Phases 1 and 2 implemented.** Sentinel supports dataset registration, immutable ingestion versions, managed source snapshots, schema fingerprints, deterministic statistical profiles, configurable dataset quality rules, and persistent assessments. Drift, anomaly detection, investigation, incidents, APIs and background processing remain future phases.
 
 ## Development
 
@@ -75,6 +75,29 @@ uv run alembic upgrade head
 The application service is `sentinel.ingestion.service.DatasetService`; construct it with a SQLAlchemy session and `FileStore`. Register with a validated `DatasetInput`, ingest with `service.ingest(Path("data.csv"), dataset_input)`, then retrieve using `retrieve_dataset`, `retrieve_versions` or `retrieve_version`. Supported files are comma-delimited header CSV, Parquet, JSON arrays of objects, and JSON Lines/NDJSON. Profiles are eager Polars calculations; the complete frame is loaded into memory. Floating NaN and infinite values are excluded from numeric minimum, maximum, mean and standard deviation; null counts remain distinct from NaN.
 
 Integration tests use only `SENTINEL_TEST_DATABASE_URL` and refuse connections unless PostgreSQL reports the database name `sentinel_test`. Apply migrations to that database before running them.
+
+## Data quality rules
+
+Phase 2 supports `required_column`, `data_type`, `not_null`, `null_percentage`, `unique`, `min_value`, `max_value`, `range`, `accepted_values`, and `duplicate_rows`. Rule parameters are validated by type-specific Pydantic contracts. For example, after ingesting a version:
+
+```python
+from sentinel.quality.contracts import QualityRuleInput, RuleType, Severity
+from sentinel.quality.service import QualityService
+
+quality = QualityService(session, file_store)
+quality.create_rule(
+    "customer-transactions",
+    QualityRuleInput(
+        name="transaction id required",
+        rule_type=RuleType.NOT_NULL,
+        parameters={"kind": "not_null", "column_name": "transaction_id"},
+        severity=Severity.ERROR,
+    ),
+)
+assessment = quality.evaluate_version(dataset_version_id)
+```
+
+Use `get_rules`, `update_rule`, `set_rule_enabled`, and `delete_rule` to manage expectations. Rules with historical findings cannot be deleted; disable them instead. Use `retrieve_assessment`, `retrieve_findings`, or `assessment_history` to read persisted results. Null checks do not treat NaN as null; uniqueness treats all nulls as one distinct value; accepted-values rules treat null as unaccepted. Row-dependent rules report ERROR for empty datasets. An empty enabled ruleset also returns ERROR with a message stating that no assertions ran. Numeric summaries exclude NaN from observed finite bounds and count NaN as violating numeric predicates.
 
 ## Documentation
 
