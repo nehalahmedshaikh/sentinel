@@ -48,7 +48,7 @@ The system should be useful independently of its AI capabilities. Statistical fi
 
 ## Project status
 
-**Phases 1, 2, and 3 implemented.** Sentinel supports dataset registration, immutable ingestion versions, managed source snapshots, deterministic profiling and quality assessments, schema and distribution drift, configurable anomaly detection, historical baselines, and deterministic investigations. Incident management, APIs, and background processing remain future phases.
+**Phases 1–4 implemented.** Sentinel supports dataset registration, immutable ingestion versions, managed source snapshots, deterministic profiling and quality assessments, schema and distribution drift, configurable anomaly detection, historical baselines, deterministic investigations, and evidence-backed persistent incident management. APIs and background processing remain future phases.
 
 ## Development
 
@@ -141,6 +141,30 @@ Numeric drift reports two-sample KS statistic/p-value, PSI, and raw-unit Wassers
 Numeric univariate anomalies use IQR fences or modified Z-scores. Categorical anomalies hash rare category labels before storing evidence. Isolation Forest and LOF are disabled by default; when enabled, preprocessing selects numeric columns in source order up to `max_features`, removes all-null/constant columns, median-imputes missing/non-finite values, and applies `StandardScaler`. Anomaly evidence stores at most 20 row indices and aggregate counts, not full records. `assessment_history` retrieves persisted trends and `change_onset` finds the earliest assessment with a matching detected finding. `investigate(version_id)` joins reliability evidence with persisted Phase 2 quality assessments and reports co-occurrence as correlation, never causation.
 
 Migration `0003_reliability_intelligence` adds policy, assessment, and finding tables. Apply with `uv run alembic upgrade head` only after setting `SENTINEL_DATABASE_URL` to the intended database. PostgreSQL integration tests require migrations to be present in the database named `sentinel_test`.
+
+## Incident intelligence
+
+Create a dataset-specific incident policy and process completed quality or reliability assessments. Policies select qualifying finding types and source severities, configure the correlation window, and provide thresholds for evidence-backed severity. A finding qualifies only when a quality result is `FAIL` or a reliability result is `DETECTED`; error, unavailable, and passing outcomes are retained as non-qualifying decisions.
+
+```python
+from sentinel.incidents.contracts import IncidentPolicyInput
+from sentinel.incidents.service import IncidentService
+
+incidents = IncidentService(session)
+policy = incidents.create_policy("customer-transactions", IncidentPolicyInput(name="default"))
+created = incidents.process_quality_assessment(quality_result.assessment.id, policy.id)
+reliability_created = incidents.process_reliability_assessment(
+    reliability_result.assessment.id, policy.id
+)
+```
+
+Correlation fingerprints hash the dataset UUID, exact finding category, and normalized affected-column set. New evidence attaches to one unambiguous, same-category incident within the configured time window when the Jaccard overlap between affected-column sets reaches `correlation_minimum_column_overlap` (default 1.0, exact set). Resolved matches may reopen on qualifying recurrence. Ambiguous or column-less matches create separate incidents. Dataset identity is always part of the fingerprint. The selected overlap and decision are preserved with evidence. `merge()` and `link()` are explicit, audited same-dataset operations; merged evidence and timelines remain queryable through the surviving incident report.
+
+Use `list_incidents`, `retrieve`, `acknowledge`, `start_investigation`, `add_note`, `set_severity`, `resolve`, and `reopen` to manage incidents. Lifecycle changes are validated and create immutable events. Automatic severity considers source severity, observed violation counts, and drift magnitude; evidence can escalate severity, while later less severe evidence cannot automatically downgrade it. Manual changes record a separate decision.
+
+`report(incident_id)` deterministically assembles persisted evidence, timeline, affected versions/columns, facts, statistical evidence, recorded correlations, hypotheses, missing evidence, and resolution details. `historical_summary(dataset)` aggregates incident status/severity, affected columns, categories, recurring versions, reopenings, and automatic severity escalations. Severity decisions use source severity, affected record counts, affected-column count, drift magnitude, and repeated evidence. Incident events, evidence links, and generation decisions are database-protected against updates and deletes.
+
+Migration `0004_incident_intelligence` adds incident policies, incidents, evidence, events, and idempotent generation-decision tables. Apply with `uv run alembic upgrade head` only after setting `SENTINEL_DATABASE_URL` to the intended database. For Phase 4 integration tests, verify and migrate only `sentinel_test`.
 
 ## Documentation
 

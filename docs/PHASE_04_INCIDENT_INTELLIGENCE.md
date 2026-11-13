@@ -406,3 +406,17 @@ Phase 4 is complete when:
 13. README and Phase 4 documentation explain the complete incident lifecycle and service usage.
 
 The result should be a functional incident-intelligence engine, not simply a database table containing alerts.
+
+## Implementation notes
+
+The service entry point is `sentinel.incidents.service.IncidentService(session)`. Configure a policy using `IncidentPolicyInput` and `IncidentPolicyConfig`, then call `process_quality_assessment(assessment_id, policy_id)` or `process_reliability_assessment(assessment_id, policy_id)`. Both return per-finding qualification decisions with reasons and associated incident identifiers. Quality `FAIL` and reliability `DETECTED` findings are eligible; ERROR, UNAVAILABLE, NOT_DETECTED, PASS, and unconfigured severities do not become incidents. An empty `finding_types` list allows every type that meets its source status and severity threshold.
+
+`minimum_source_severities` maps `quality` and `reliability` to severity levels at or above the least restrictive configured level. The default is `ERROR` or `CRITICAL` for either source. Correlation uses an exact finding category and a Jaccard overlap of normalized affected-column sets, scoped to the dataset UUID. The default `correlation_minimum_column_overlap=1.0` requires an exact set; lower values allow configured partial overlap. An unresolved match must be unique and within `correlation_window_hours`. A uniquely matching resolved incident may be reopened when the same category/column signal recurs. A category-only match is not merged because it lacks column evidence. The overlap score and decision are stored on the evidence metadata.
+
+Severity decisions map source INFO/WARNING/ERROR/CRITICAL to INFORMATIONAL/LOW/MEDIUM/CRITICAL, then may raise severity using configured affected-record, affected-column, recurrence, or PSI/JS drift thresholds. The policy does not infer business importance. New evidence can escalate an incident, but automatic evaluation does not downgrade it. Manual severity changes are recorded as manual decisions.
+
+Valid lifecycle paths are OPEN → ACKNOWLEDGED/INVESTIGATING/RESOLVED; ACKNOWLEDGED → INVESTIGATING/RESOLVED; INVESTIGATING → RESOLVED; RESOLVED → REOPENED; and REOPENED → ACKNOWLEDGED/INVESTIGATING/RESOLVED. Each transition writes status history; every resolution writes a separate resolution event, so earlier resolutions remain available after reopening. Notes and resolution details are events. Database triggers reject updates/deletes on evidence, events, and generation decisions.
+
+Use `retrieve()` for one incident with evidence and timeline, `report()` for a Pydantic `InvestigationReport`, and `historical_summary()` for recurrence counts by dataset. The report is assembled from stored records in stable ordering and explicitly labels possible explanations as hypotheses. When incidents are merged, the retired incident keeps its original identity, events, and evidence; retrieval/report for the survivor includes all merged descendants. Linking records a relationship without combining identities.
+
+Migration `0004_incident_intelligence` follows `0003_reliability_intelligence`. Apply using `SENTINEL_DATABASE_URL` pointed at the intended database; integration tests reject any database other than `sentinel_test`. No Phase 4 code adds a dependency.
