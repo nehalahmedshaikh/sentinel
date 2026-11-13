@@ -154,3 +154,5 @@ Migration `0003_reliability_intelligence` adds policy, assessment, and finding t
 - [Data quality rule engine decision](docs/decisions/0002-data-quality-rule-engine.md)
 - [Phase 3: Data Reliability Intelligence](docs/PHASE_03_RELIABILITY_INTELLIGENCE.md)
 - [ADR 0003: Data Reliability Intelligence](docs/decisions/0003-reliability-intelligence.md)
+- [Phase 4: Incident Intelligence](docs/PHASE_04_INCIDENT_INTELLIGENCE.md)
+- [ADR 0004: Incident Intelligence](docs/decisions/0004-incident-intelligence.md)
