@@ -22,7 +22,9 @@
     <form action="/dashboard/quality-rules/{{ rule.id }}/enabled" method="post"><input type="hidden" name="enabled" value="{{ "false" if rule.enabled else "true" }}"><button>{{ "Disable" if rule.enabled else "Enable" }}</button></form>
   </details></td></tr>{% endfor %}</table>{% else %}<p class="empty">No quality rules defined.</p>{% endif %}
   <details><summary>Create rule (JSON parameters)</summary><form action="/dashboard/datasets/{{ dataset.slug }}/quality-rules" method="post"><label>Name<input name="name" required></label><label>Rule type<select name="rule_type">{% for item in ["required_column","data_type","not_null","null_percentage","unique","min_value","max_value","range","accepted_values","duplicate_rows"] %}<option>{{ item }}</option>{% endfor %}</select></label><label>Parameters JSON<textarea name="parameters_json" rows="3" required placeholder='{"kind":"not_null","column_name":"column"}'></textarea></label><button>Create rule</button></form></details>
-  <h3>Assessment history</h3><ul>{% for item in quality_history %}<li>Quality · {{ item.assessment.status }} · {{ item.assessment.evaluated_at }} · <a href="/dashboard/quality/assessments/{{ item.assessment.id }}">{{ item.assessment.id }}</a></li>{% else %}<li>No quality assessments.</li>{% endfor %}</ul>
+  <h3>Assessment history and incident generation</h3><ul>{% for item in quality_history %}<li>Quality · {{ item.assessment.status }} · {{ item.assessment.evaluated_at }} · <a href="/dashboard/quality/assessments/{{ item.assessment.id }}">{{ item.assessment.id }}</a>
+    {% if incident_policies|selectattr("enabled")|list %}<form action="/dashboard/datasets/{{ dataset.slug }}/incidents/generate" method="post"><input type="hidden" name="source_type" value="quality"><input type="hidden" name="assessment_id" value="{{ item.assessment.id }}"><label>Incident policy<select name="policy_id" required>{% for policy in incident_policies if policy.enabled %}<option value="{{ policy.id }}">{{ policy.name }}</option>{% endfor %}</select></label><button>Generate incidents</button></form>{% endif %}
+  </li>{% else %}<li>No quality assessments.</li>{% endfor %}</ul>
 </section>
 <section>
   <h2>Reliability policies</h2>
@@ -31,6 +33,17 @@
     <form action="/dashboard/reliability-policies/{{ policy.id }}/enabled" method="post"><input type="hidden" name="enabled" value="{{ "false" if policy.enabled else "true" }}"><button>{{ "Disable" if policy.enabled else "Enable" }}</button></form>
   </details></li>{% endfor %}</ul>{% else %}<p class="empty">No reliability policies defined.</p>{% endif %}
   <details><summary>Create reliability policy</summary><form action="/dashboard/datasets/{{ dataset.slug }}/reliability-policies" method="post"><label>Name<input name="name" required></label><label>Configuration JSON<textarea name="config_json" rows="5" required placeholder='{}'></textarea></label><button>Create policy</button></form></details>
-  <h3>Assessment history</h3><ul>{% for item in reliability_history %}<li>Reliability · {{ item.assessment.status }} · {{ item.assessment.evaluated_at }} · <a href="/dashboard/reliability/assessments/{{ item.assessment.id }}">{{ item.assessment.id }}</a> · {{ item.findings|length }} findings</li>{% else %}<li>No reliability assessments.</li>{% endfor %}</ul>
+  <h3>Assessment history and incident generation</h3><ul>{% for item in reliability_history %}<li>Reliability · {{ item.assessment.status }} · {{ item.assessment.evaluated_at }} · <a href="/dashboard/reliability/assessments/{{ item.assessment.id }}">{{ item.assessment.id }}</a> · {{ item.findings|length }} findings
+    {% if incident_policies|selectattr("enabled")|list %}<form action="/dashboard/datasets/{{ dataset.slug }}/incidents/generate" method="post"><input type="hidden" name="source_type" value="reliability"><input type="hidden" name="assessment_id" value="{{ item.assessment.id }}"><label>Incident policy<select name="policy_id" required>{% for policy in incident_policies if policy.enabled %}<option value="{{ policy.id }}">{{ policy.name }}</option>{% endfor %}</select></label><button>Generate incidents</button></form>{% endif %}
+  </li>{% else %}<li>No reliability assessments.</li>{% endfor %}</ul>
+</section>
+<section>
+  <h2>Incident-generation policies</h2>
+  {% if incident_policies %}<table><tr><th>Name</th><th>State</th><th>Fingerprint</th><th>Configuration</th></tr>
+  {% for policy in incident_policies %}<tr><td>{{ policy.name }}</td><td>{{ "Enabled" if policy.enabled else "Disabled" }}</td><td>{{ policy.fingerprint }}</td><td><details><summary>Manage policy</summary>
+    <form action="/dashboard/incident-policies/{{ policy.id }}" method="post"><input type="hidden" name="enabled" value="{{ "true" if policy.enabled else "false" }}"><label>Name<input name="name" value="{{ policy.name }}" required></label><label>Configuration JSON<textarea name="config_json" rows="8" required>{{ policy.config.model_dump(mode="json")|tojson }}</textarea></label><button>Save policy</button></form>
+    <form action="/dashboard/incident-policies/{{ policy.id }}/enabled" method="post"><input type="hidden" name="enabled" value="{{ "false" if policy.enabled else "true" }}"><button>{{ "Disable" if policy.enabled else "Enable" }}</button></form>
+  </details></td></tr>{% endfor %}</table>{% else %}<p class="empty">No incident policies yet. Create one with the established default thresholds or configure its JSON values.</p>{% endif %}
+  <details><summary>Create incident policy</summary><form action="/dashboard/datasets/{{ dataset.slug }}/incident-policies" method="post"><label>Name<input name="name" required placeholder="default"></label><label>Configuration JSON (optional; blank uses Phase 4 defaults)<textarea name="config_json" rows="8" placeholder='{}'></textarea></label><button>Create policy</button></form></details>
 </section>
 {% endblock %}

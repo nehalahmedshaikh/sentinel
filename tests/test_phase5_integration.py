@@ -4,7 +4,7 @@ import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -276,6 +276,136 @@ def test_dashboard_core_pages_render_against_persisted_services(
         ):
             response = client.get(path)
             assert response.status_code == 200, (path, response.text)
+        incident_page = client.get("/dashboard/incidents?status=OPEN")
+        assert incident_page.status_code == 200
+        assert 'value="" disabled selected>Any dataset</option>' in incident_page.text
+
+
+def test_incident_policy_api_and_real_assessment_generation(engine: Engine, tmp_path: Path) -> None:
+    from pydantic import TypeAdapter
+
+    from sentinel.incidents.contracts import IncidentPolicyConfig
+    from sentinel.incidents.service import IncidentService
+    from sentinel.quality.contracts import QualityRuleInput, RuleParameters, RuleType, Severity
+    from sentinel.quality.service import QualityService
+
+    source = tmp_path / "policy-dataset.csv"
+    source.write_text("value\n\n", encoding="utf-8")
+    storage = FileStore(tmp_path / "policy-managed")
+    with session_factory(engine)() as session:
+        registration = DatasetService(session, storage).ingest(
+            source,
+            DatasetInput(slug=f"policy-{uuid4().hex}", display_name="Policy test"),
+        )
+        QualityService(session, storage).create_rule(
+            registration.dataset.slug,
+            QualityRuleInput(
+                name="required value",
+                rule_type=RuleType.NOT_NULL,
+                parameters=TypeAdapter(RuleParameters).validate_python(
+                    {"kind": "not_null", "column_name": "value"}
+                ),
+                severity=Severity.CRITICAL,
+            ),
+        )
+        assessment = (
+            QualityService(session, storage).evaluate_version(registration.version.id).assessment
+        )
+
+    settings = Settings(
+        database_url=str(engine.url),
+        data_dir=str(tmp_path),
+        api_key="phase-five-policy-api-secret",
+    )
+    headers = {"Authorization": f"Bearer {settings.api_key}"}
+    with TestClient(create_app(settings)) as client:
+        collection = f"/api/v1/incidents/datasets/{registration.dataset.slug}/policies"
+        assert client.get(collection, headers=headers).json() == []
+        created = client.post(collection, headers=headers, json={"name": "default"})
+        assert created.status_code == 201
+        policy = created.json()
+        assert policy["config"]["minimum_source_severities"] == {
+            "quality": ["ERROR", "CRITICAL"],
+            "reliability": ["ERROR", "CRITICAL"],
+        }
+        assert [item["id"] for item in client.get(collection, headers=headers).json()] == [
+            policy["id"]
+        ]
+
+        updated = client.put(
+            f"/api/v1/incidents/policies/{policy['id']}",
+            headers=headers,
+            json={
+                "name": "default",
+                "enabled": True,
+                "config": IncidentPolicyConfig().model_dump(mode="json"),
+            },
+        )
+        assert updated.status_code == 200
+        assert (
+            client.post(
+                f"/api/v1/incidents/policies/{policy['id']}/enabled?enabled=false",
+                headers=headers,
+            ).json()["enabled"]
+            is False
+        )
+        assert (
+            client.post(
+                f"/api/v1/incidents/policies/{policy['id']}/enabled?enabled=true",
+                headers=headers,
+            ).json()["enabled"]
+            is True
+        )
+
+        with session_factory(engine)() as session:
+            generation = IncidentService(session).process_quality_assessment(
+                assessment.id, UUID(policy["id"])
+            )
+            assert generation.decisions
+            assert generation.incidents
+
+        payload = {
+            "source_type": "quality",
+            "assessment_id": str(assessment.id),
+            "policy_id": policy["id"],
+        }
+        queued = client.post("/api/v1/incidents/generate", headers=headers, json=payload)
+        assert queued.status_code == 202
+        repeated = client.post("/api/v1/incidents/generate", headers=headers, json=payload)
+        assert repeated.json()["id"] == queued.json()["id"]
+
+        page = client.get(f"/dashboard/datasets/{registration.dataset.slug}")
+        assert page.status_code == 200
+        assert "Incident-generation policies" in page.text
+        assert f'value="{policy["id"]}"' in page.text
+        dashboard_created = client.post(
+            f"/dashboard/datasets/{registration.dataset.slug}/incident-policies",
+            data={"name": "dashboard-default", "config_json": ""},
+            follow_redirects=False,
+        )
+        assert dashboard_created.status_code == 303
+        dashboard_policies = client.get(collection, headers=headers).json()
+        dashboard_policy = next(
+            item for item in dashboard_policies if item["name"] == "dashboard-default"
+        )
+        assert dashboard_policy["config"]["correlation_window_hours"] == 72
+        disabled = client.post(
+            f"/dashboard/incident-policies/{dashboard_policy['id']}/enabled",
+            data={"enabled": "false"},
+            follow_redirects=False,
+        )
+        assert disabled.status_code == 303
+        form_job = client.post(
+            f"/dashboard/datasets/{registration.dataset.slug}/incidents/generate",
+            data={
+                "source_type": "quality",
+                "assessment_id": str(assessment.id),
+                "policy_id": policy["id"],
+            },
+            follow_redirects=False,
+        )
+        assert form_job.status_code == 303
+        assert form_job.headers["location"] == f"/dashboard/datasets/{registration.dataset.slug}"
 
 
 def test_ai_investigation_persists_validated_evidence_references(

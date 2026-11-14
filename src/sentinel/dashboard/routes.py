@@ -15,18 +15,21 @@ from sentinel.ai.service import queue_investigation, retrieve_investigation
 from sentinel.api.dependencies import SessionDep
 from sentinel.api.uploads import upload_to_job
 from sentinel.incidents.contracts import (
+    IncidentGenerationInput,
+    IncidentPolicyInput,
     IncidentSeverity,
     IncidentStatus,
     NoteInput,
     ResolveInput,
     SeverityInput,
+    SourceType,
 )
 from sentinel.incidents.models import IncidentRow
 from sentinel.incidents.service import IncidentService
 from sentinel.operations.contracts import ScheduleInput
 from sentinel.operations.models import JobRow
 from sentinel.operations.service import OperationsService
-from sentinel.persistence.models import DatasetRow
+from sentinel.persistence.models import DatasetRow, DatasetVersionRow
 from sentinel.quality.contracts import QualityRuleInput, RuleParameters, RuleType, Severity
 from sentinel.quality.models import QualityAssessmentRow
 from sentinel.quality.service import QualityService
@@ -37,11 +40,13 @@ _TEMPLATE_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=_TEMPLATE_DIR)
 router = APIRouter(tags=["dashboard"])
 FormText = Annotated[str, Form()]
+OptionalFormText = Annotated[str | None, Form()]
 FormUUID = Annotated[UUID, Form()]
 OptionalFormUUID = Annotated[UUID | None, Form()]
 FormInteger = Annotated[int, Form()]
 FormBool = Annotated[bool, Form()]
 FormRule = Annotated[RuleType, Form()]
+FormSourceType = Annotated[SourceType, Form()]
 FormUpload = Annotated[UploadFile, File()]
 
 
@@ -102,6 +107,7 @@ def dataset_detail(dataset_key: str, request: Request, session: SessionDep) -> H
         reliability_service = ReliabilityService(session, request.app.state.storage)
         policies = reliability_service.get_policies(dataset_key)
         reliability_history = reliability_service.assessment_history(dataset_key)
+        incident_policies = IncidentService(session).get_policies(dataset_key)
     except ValueError as exc:
         raise HTTPException(404, "Dataset not found") from exc
     return templates.TemplateResponse(
@@ -114,6 +120,7 @@ def dataset_detail(dataset_key: str, request: Request, session: SessionDep) -> H
             "policies": policies,
             "quality_history": quality_history,
             "reliability_history": reliability_history,
+            "incident_policies": incident_policies,
         },
     )
 
@@ -247,6 +254,113 @@ def dashboard_set_reliability_policy_enabled(
     except ValueError as exc:
         raise HTTPException(404, "Reliability policy not found") from exc
     return RedirectResponse(request.headers.get("referer", "/dashboard/datasets"), status_code=303)
+
+
+@router.post("/dashboard/datasets/{dataset_key}/incident-policies")
+def dashboard_create_incident_policy(
+    dataset_key: str,
+    name: FormText,
+    session: SessionDep,
+    config_json: OptionalFormText = None,
+) -> RedirectResponse:
+    import json
+
+    try:
+        data = IncidentPolicyInput(
+            name=name,
+            config=(json.loads(config_json) if config_json and config_json.strip() else {}),
+        )
+        IncidentService(session).create_policy(dataset_key, data)
+    except Exception as exc:
+        raise HTTPException(422, "Invalid incident policy") from exc
+    return RedirectResponse(f"/dashboard/datasets/{dataset_key}", status_code=303)
+
+
+@router.post("/dashboard/incident-policies/{policy_id}")
+def dashboard_update_incident_policy(
+    request: Request,
+    policy_id: UUID,
+    name: FormText,
+    config_json: FormText,
+    enabled: FormBool,
+    session: SessionDep,
+) -> RedirectResponse:
+    import json
+
+    try:
+        data = IncidentPolicyInput(name=name, config=json.loads(config_json), enabled=enabled)
+        IncidentService(session).update_policy(policy_id, data)
+    except ValueError as exc:
+        raise HTTPException(422, "Invalid incident policy") from exc
+    return RedirectResponse(request.headers.get("referer", "/dashboard/incidents"), status_code=303)
+
+
+@router.post("/dashboard/incident-policies/{policy_id}/enabled")
+def dashboard_set_incident_policy_enabled(
+    request: Request, policy_id: UUID, enabled: FormBool, session: SessionDep
+) -> RedirectResponse:
+    try:
+        IncidentService(session).set_policy_enabled(policy_id, enabled)
+    except ValueError as exc:
+        raise HTTPException(404, "Incident policy not found") from exc
+    return RedirectResponse(request.headers.get("referer", "/dashboard/incidents"), status_code=303)
+
+
+@router.post("/dashboard/datasets/{dataset_key}/incidents/generate")
+def dashboard_generate_incidents(
+    dataset_key: str,
+    source_type: FormSourceType,
+    assessment_id: FormUUID,
+    policy_id: FormUUID,
+    session: SessionDep,
+) -> RedirectResponse:
+    from sentinel.incidents.models import IncidentPolicyRow
+    from sentinel.operations.contracts import JobType
+    from sentinel.quality.models import QualityAssessmentRow
+    from sentinel.reliability.models import ReliabilityAssessmentRow
+
+    dataset = session.scalar(select(DatasetRow).where(DatasetRow.slug == dataset_key))
+    policy = session.get(IncidentPolicyRow, policy_id)
+    assessment_model = (
+        QualityAssessmentRow if source_type == SourceType.QUALITY else ReliabilityAssessmentRow
+    )
+    assessment = session.get(assessment_model, assessment_id)
+    assessed_dataset_id = None
+    if isinstance(assessment, QualityAssessmentRow):
+        version = session.get(DatasetVersionRow, assessment.dataset_version_id)
+        assessed_dataset_id = version.dataset_id if version is not None else None
+    elif isinstance(assessment, ReliabilityAssessmentRow):
+        assessed_dataset_id = assessment.dataset_id
+    if (
+        dataset is None
+        or policy is None
+        or assessment is None
+        or not policy.enabled
+        or policy.dataset_id != dataset.id
+        or assessed_dataset_id != dataset.id
+    ):
+        session.rollback()
+        raise HTTPException(422, "Select an assessment and enabled policy for this dataset")
+    dataset_uuid = dataset.id
+    request_data = IncidentGenerationInput(
+        source_type=source_type, assessment_id=assessment_id, policy_id=policy_id
+    )
+    session.rollback()
+    OperationsService(session).enqueue(
+        JobType.INCIDENTS,
+        {
+            "source_type": request_data.source_type.value,
+            "assessment_id": str(request_data.assessment_id),
+            "policy_id": str(request_data.policy_id),
+        },
+        idempotency_key=(
+            f"incidents:{request_data.source_type.value}:"
+            f"{request_data.assessment_id}:{request_data.policy_id}"
+        ),
+        dataset_id=dataset_uuid,
+        policy_id=policy_id,
+    )
+    return RedirectResponse(f"/dashboard/datasets/{dataset_key}", status_code=303)
 
 
 @router.post("/dashboard/datasets/{dataset_key}/assessments")

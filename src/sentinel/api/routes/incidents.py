@@ -5,10 +5,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from sentinel.api.dependencies import SessionDep, require_api_key
 from sentinel.incidents.contracts import (
     IncidentGenerationInput,
+    IncidentPolicyInput,
     IncidentSeverity,
     IncidentStatus,
     IncidentView,
@@ -24,6 +26,46 @@ from sentinel.persistence.models import DatasetRow
 router = APIRouter(
     prefix="/api/v1/incidents", tags=["incidents"], dependencies=[Depends(require_api_key)]
 )
+
+
+@router.get("/datasets/{dataset_key}/policies")
+def list_incident_policies(dataset_key: str, session: SessionDep) -> object:
+    try:
+        return IncidentService(session).get_policies(dataset_key)
+    except ValueError as exc:
+        raise HTTPException(404, "Dataset not found") from exc
+
+
+@router.post("/datasets/{dataset_key}/policies", status_code=status.HTTP_201_CREATED)
+def create_incident_policy(
+    dataset_key: str, data: IncidentPolicyInput, session: SessionDep
+) -> object:
+    try:
+        return IncidentService(session).create_policy(dataset_key, data)
+    except IntegrityError as exc:
+        raise HTTPException(409, "An incident policy with this name already exists") from exc
+    except ValueError as exc:
+        raise HTTPException(404, "Dataset not found") from exc
+
+
+@router.put("/policies/{policy_id}")
+def update_incident_policy(
+    policy_id: UUID, data: IncidentPolicyInput, session: SessionDep
+) -> object:
+    try:
+        return IncidentService(session).update_policy(policy_id, data)
+    except IntegrityError as exc:
+        raise HTTPException(409, "An incident policy with this name already exists") from exc
+    except ValueError as exc:
+        raise HTTPException(404, "Incident policy not found") from exc
+
+
+@router.post("/policies/{policy_id}/enabled")
+def set_incident_policy_enabled(policy_id: UUID, enabled: bool, session: SessionDep) -> object:
+    try:
+        return IncidentService(session).set_policy_enabled(policy_id, enabled)
+    except ValueError as exc:
+        raise HTTPException(404, "Incident policy not found") from exc
 
 
 @router.post("/generate", status_code=status.HTTP_202_ACCEPTED)
