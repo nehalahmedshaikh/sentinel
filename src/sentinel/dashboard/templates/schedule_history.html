@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block title %}Schedule history · Sentinel{% endblock %}{% block content %}
+<h1>Schedule execution history</h1><p>{{ schedule.id }} · every {{ schedule.interval_seconds }} seconds</p>
+{% if history %}<table><tr><th>Occurrence</th><th>Outcome</th><th>Job</th></tr>{% for item in history %}<tr><td>{{ item.occurrence_at }}</td><td>{{ item.outcome }}</td><td><a href="/dashboard/jobs/{{ item.job_id }}">{{ item.job_id }}</a></td></tr>{% endfor %}</table>{% else %}<p class="empty">No executions recorded yet.</p>{% endif %}
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block title %}Overview · Sentinel{% endblock %}{% block content %}
+<h1>Operations overview</h1>
+<div class="grid">
+<div class="card"><div>Datasets</div><div class="metric">{{ datasets }}</div></div>
+<div class="card"><div>Quality assessments</div><div class="metric">{{ quality_total }}</div></div>
+<div class="card"><div>Reliability assessments</div><div class="metric">{{ reliability_total }}</div></div>
+<div class="card"><div>Open incidents</div><div class="metric">{{ incidents|length }}</div></div>
+<div class="card"><div>Schedules</div><div class="metric">{{ schedules|length }}</div></div>
+<div class="card"><div>Running or failed jobs</div><div class="metric">{{ jobs|length }}</div></div>
+</div>
+<section><h2>Open incidents by severity</h2>{% if incidents %}<table><tr><th>Incident</th><th>Status</th><th>Severity</th><th>Last observed</th></tr>{% for item in incidents %}<tr><td><a href="/dashboard/incidents/{{ item.id }}">{{ item.reference }} · {{ item.title }}</a></td><td>{{ item.status }}</td><td class="{{ item.severity }}">{{ item.severity }}</td><td>{{ item.last_observed_at }}</td></tr>{% endfor %}</table>{% else %}<p class="empty">No open incidents. Findings will appear here when they qualify under an incident policy.</p>{% endif %}</section>
+<section><h2>Recent jobs</h2><div hx-get="/dashboard/fragments/jobs" hx-trigger="load, every 5s" hx-swap="innerHTML"><p class="hint">Loading job activity…</p></div></section>
+<section><h2>Monitoring schedules</h2>{% if schedules %}<table><tr><th>Dataset</th><th>Interval</th><th>Enabled</th><th>Next run</th><th>Last outcome</th></tr>{% for schedule in schedules %}<tr><td>{{ schedule.dataset_id }}</td><td>{{ schedule.interval_seconds }} sec</td><td>{{ schedule.enabled }}</td><td>{{ schedule.next_run_at }}</td><td>{{ schedule.last_outcome or "—" }}</td></tr>{% endfor %}</table>{% else %}<p class="empty">No schedules configured.</p>{% endif %}</section>{% endblock %}

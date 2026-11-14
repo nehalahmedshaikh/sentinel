@@ -48,7 +48,7 @@ The system should be useful independently of its AI capabilities. Statistical fi
 
 ## Project status
 
-**Phases 1–4 implemented.** Sentinel supports dataset registration, immutable ingestion versions, managed source snapshots, deterministic profiling and quality assessments, schema and distribution drift, configurable anomaly detection, historical baselines, deterministic investigations, and evidence-backed persistent incident management. APIs and background processing remain future phases.
+**Phases 1–5 implemented.** Sentinel supports dataset registration, immutable ingestion versions, managed source snapshots, deterministic profiling and quality assessments, schema and distribution drift, configurable anomaly detection, historical baselines, evidence-backed incident management, durable background jobs, scheduled monitoring, an operator dashboard, a versioned API, and optional evidence-grounded AI investigations.
 
 ## Development
 
@@ -63,6 +63,44 @@ uv run mypy src
 ```
 
 See [AGENTS.md](AGENTS.md) for engineering instructions and [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) for the project scope and architectural direction.
+
+## Operational platform
+
+Phase 5 adds a FastAPI application, PostgreSQL job and schedule records, a transactional outbox, Celery workers and Beat, a Jinja2/HTMX dashboard, Prometheus metrics, and an optional OpenAI-compatible investigation provider. Redis is the task broker; PostgreSQL remains authoritative for jobs and results. AI is disabled unless explicitly enabled.
+
+Copy `.env.example` to `.env` and set a private API key plus the local PostgreSQL and Redis URLs. The example uses separate `sentinel` and `sentinel_test` databases. Keep both database variables pointed at their intended database; integration tests refuse to run unless PostgreSQL reports `sentinel_test`.
+
+```bash
+uv sync
+uv run alembic upgrade head
+uv run uvicorn sentinel.api.app:app --host 127.0.0.1 --port 8000
+```
+
+In separate terminals, start Redis, then run a worker and the periodic dispatcher:
+
+```bash
+uv run celery -A sentinel.operations.celery_app:celery_app worker --loglevel=INFO --concurrency=1
+uv run celery -A sentinel.operations.celery_app:celery_app beat --loglevel=INFO
+```
+
+Open the dashboard at `http://127.0.0.1:8000/`. The API uses `/api/v1`; OpenAPI is at `/docs`, liveness at `/health`, dependency readiness at `/ready`, and Prometheus metrics at `/metrics`. Send `Authorization: Bearer $SENTINEL_API_KEY` to operational API routes. The dashboard is intended for local operator use and does not implement multi-user authentication.
+
+Uploads are limited by `SENTINEL_UPLOAD_MAX_BYTES` and `SENTINEL_ALLOWED_FILE_TYPES`, validated before a job is committed, staged below the managed data directory, and removed after success or a terminal failure. Broker publication is retried from PostgreSQL outbox rows. If Redis is unavailable, jobs remain visible as queued and are published when the dispatcher can reconnect.
+
+For AI, set `SENTINEL_AI_ENABLED=true`, `SENTINEL_AI_BASE_URL`, and `SENTINEL_AI_MODEL`; set `SENTINEL_AI_API_KEY` only when required by the provider. The endpoint may be an origin or an OpenAI-compatible `/v1` base URL. Investigations are read-only, send bounded evidence metadata rather than dataset records, require evidence UUIDs for observations and hypotheses, and persist provider failures without changing Sentinel findings.
+
+Useful checks:
+
+```bash
+uv run pytest --cov=sentinel --cov-report=term-missing
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy .
+uv lock --check
+git diff --check
+```
+
+See [Phase 5 operational documentation](docs/PHASE_05_OPERATIONAL_PLATFORM_AND_AI.md) for configuration details, service endpoints, task behavior, and troubleshooting.
 
 ## Dataset foundation
 
@@ -180,3 +218,5 @@ Migration `0004_incident_intelligence` adds incident policies, incidents, eviden
 - [ADR 0003: Data Reliability Intelligence](docs/decisions/0003-reliability-intelligence.md)
 - [Phase 4: Incident Intelligence](docs/PHASE_04_INCIDENT_INTELLIGENCE.md)
 - [ADR 0004: Incident Intelligence](docs/decisions/0004-incident-intelligence.md)
+- [Phase 5 specification](docs/PHASE_05_OPERATIONAL_PLATFORM_AND_AI.md)
+- [ADR 0005 — Operational Platform and AI](docs/decisions/0005-operational-platform-and-ai.md)

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ dataset.slug }} · Sentinel{% endblock %}
+{% block content %}
+<h1>{{ dataset.display_name }}</h1><p class="hint">{{ dataset.slug }} · {{ dataset.description or "No description" }}</p>
+<div class="grid">
+  <div class="card"><h2>Upload new version</h2><form action="/dashboard/upload" method="post" enctype="multipart/form-data"><input type="hidden" name="slug" value="{{ dataset.slug }}"><input type="hidden" name="display_name" value="{{ dataset.display_name }}"><input type="file" name="file" required><button>Queue ingestion</button></form></div>
+  <div class="card"><h2>Rules and policies</h2><p>{{ rules|length }} quality rules · {{ policies|length }} reliability policies</p></div>
+</div>
+<section>
+  <h2>Version history</h2>
+  {% if versions %}<table><tr><th>Version</th><th>File</th><th>Rows</th><th>Columns</th><th>Schema / profile</th><th>Ingested</th><th>Assess</th></tr>
+  {% for version in versions %}<tr><td>v{{ version.version_number }}</td><td>{{ version.source_filename }}</td><td>{{ version.row_count }}</td><td>{{ version.column_count }}</td><td><details><summary>Schema</summary><pre>{{ version.schema_ }}</pre></details><details><summary>Profile</summary><pre>{{ version.profile }}</pre></details></td><td>{{ version.ingested_at }}</td><td>
+    <form action="/dashboard/datasets/{{ dataset.slug }}/assessments" method="post"><input type="hidden" name="version_id" value="{{ version.id }}"><input type="hidden" name="kind" value="quality"><button>Run quality</button></form>
+    {% if policies %}<form action="/dashboard/datasets/{{ dataset.slug }}/assessments" method="post"><input type="hidden" name="version_id" value="{{ version.id }}"><input type="hidden" name="kind" value="reliability"><select name="policy_id">{% for policy in policies %}<option value="{{ policy.id }}">{{ policy.name }}</option>{% endfor %}</select><button>Run reliability</button></form>{% endif %}
+  </td></tr>{% endfor %}</table>{% else %}<p class="empty">No versions ingested.</p>{% endif %}
+</section>
+<section>
+  <h2>Quality rules</h2>
+  {% if rules %}<table><tr><th>Name</th><th>Type</th><th>Severity</th><th>Enabled</th><th>Parameters</th><th>Manage</th></tr>
+  {% for rule in rules %}<tr><td>{{ rule.name }}</td><td>{{ rule.rule_type }}</td><td>{{ rule.severity }}</td><td>{{ rule.enabled }}</td><td><pre>{{ rule.parameters }}</pre></td><td><details><summary>Edit</summary>
+    <form action="/dashboard/quality-rules/{{ rule.id }}" method="post"><input type="hidden" name="enabled" value="{{ "true" if rule.enabled else "false" }}"><label>Name<input name="name" value="{{ rule.name }}" required></label><label>Type<select name="rule_type">{% for value in ["required_column","data_type","not_null","null_percentage","unique","min_value","max_value","range","accepted_values","duplicate_rows"] %}<option value="{{ value }}" {{ "selected" if rule.rule_type == value else "" }}>{{ value }}</option>{% endfor %}</select></label><label>Severity<select name="severity">{% for value in ["INFO","WARNING","ERROR","CRITICAL"] %}<option {{ "selected" if rule.severity == value else "" }}>{{ value }}</option>{% endfor %}</select></label><label>Parameters JSON<textarea name="parameters_json" required>{{ rule.parameters.model_dump(mode="json")|tojson }}</textarea></label><button>Save rule</button></form>
+    <form action="/dashboard/quality-rules/{{ rule.id }}/enabled" method="post"><input type="hidden" name="enabled" value="{{ "false" if rule.enabled else "true" }}"><button>{{ "Disable" if rule.enabled else "Enable" }}</button></form>
+  </details></td></tr>{% endfor %}</table>{% else %}<p class="empty">No quality rules defined.</p>{% endif %}
+  <details><summary>Create rule (JSON parameters)</summary><form action="/dashboard/datasets/{{ dataset.slug }}/quality-rules" method="post"><label>Name<input name="name" required></label><label>Rule type<select name="rule_type">{% for item in ["required_column","data_type","not_null","null_percentage","unique","min_value","max_value","range","accepted_values","duplicate_rows"] %}<option>{{ item }}</option>{% endfor %}</select></label><label>Parameters JSON<textarea name="parameters_json" rows="3" required placeholder='{"kind":"not_null","column_name":"column"}'></textarea></label><button>Create rule</button></form></details>
+  <h3>Assessment history</h3><ul>{% for item in quality_history %}<li>Quality · {{ item.assessment.status }} · {{ item.assessment.evaluated_at }} · <a href="/dashboard/quality/assessments/{{ item.assessment.id }}">{{ item.assessment.id }}</a></li>{% else %}<li>No quality assessments.</li>{% endfor %}</ul>
+</section>
+<section>
+  <h2>Reliability policies</h2>
+  {% if policies %}<ul>{% for policy in policies %}<li>{{ policy.name }} · {{ "enabled" if policy.enabled else "disabled" }} · {{ policy.fingerprint }}<details><summary>Configure</summary>
+    <form action="/dashboard/reliability-policies/{{ policy.id }}" method="post"><label>Name<input name="name" value="{{ policy.name }}" required></label><label>Configuration JSON<textarea name="config_json" rows="5" required>{{ policy.config.model_dump(mode="json")|tojson }}</textarea></label><button>Save policy</button></form>
+    <form action="/dashboard/reliability-policies/{{ policy.id }}/enabled" method="post"><input type="hidden" name="enabled" value="{{ "false" if policy.enabled else "true" }}"><button>{{ "Disable" if policy.enabled else "Enable" }}</button></form>
+  </details></li>{% endfor %}</ul>{% else %}<p class="empty">No reliability policies defined.</p>{% endif %}
+  <details><summary>Create reliability policy</summary><form action="/dashboard/datasets/{{ dataset.slug }}/reliability-policies" method="post"><label>Name<input name="name" required></label><label>Configuration JSON<textarea name="config_json" rows="5" required placeholder='{}'></textarea></label><button>Create policy</button></form></details>
+  <h3>Assessment history</h3><ul>{% for item in reliability_history %}<li>Reliability · {{ item.assessment.status }} · {{ item.assessment.evaluated_at }} · <a href="/dashboard/reliability/assessments/{{ item.assessment.id }}">{{ item.assessment.id }}</a> · {{ item.findings|length }} findings</li>{% else %}<li>No reliability assessments.</li>{% endfor %}</ul>
+</section>
+{% endblock %}

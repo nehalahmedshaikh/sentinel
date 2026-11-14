@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}{{ kind }} assessment · Sentinel{% endblock %}{% block content %}
+<h1>{{ kind }} assessment</h1><p>Status: <strong>{{ result.assessment.status }}</strong> · Assessed {{ result.assessment.evaluated_at }}</p>
+<p>Version: {{ result.assessment.dataset_version_id if kind == "Quality" else result.assessment.target_version_id }}</p>
+{% if kind == "Reliability" %}<p>Baseline strategy: {{ result.assessment.baseline_strategy }} · Baselines: {{ result.assessment.baseline_versions }}</p>{% endif %}
+{% if result.findings %}<table><tr><th>Finding</th><th>Status</th><th>Severity</th><th>Column</th><th>Evidence</th></tr>{% for finding in result.findings %}<tr><td>{{ finding.finding_type if kind == "Reliability" else finding.rule_snapshot.get("rule_type") }}</td><td>{{ finding.status }}</td><td>{{ finding.severity }}</td><td>{% if kind == "Reliability" %}{{ finding.column_name or "—" }}{% else %}{{ finding.rule_snapshot.get("parameters", {}).get("column_name", "—") }}{% endif %}</td><td><pre>{{ finding.evidence }}</pre></td></tr>{% endfor %}</table>{% else %}<p class="empty">No findings were produced by this assessment.</p>{% endif %}
+{% endblock %}

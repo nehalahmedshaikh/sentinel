@@ -1,0 +1,1 @@
+{% extends "base.html" %}{% block title %}Jobs · Sentinel{% endblock %}{% block content %}<h1>Job history</h1><div hx-get="/dashboard/fragments/jobs" hx-trigger="load, every 5s" hx-swap="innerHTML"><p class="hint">Loading jobs…</p></div>{% endblock %}

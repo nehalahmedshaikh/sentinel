@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ detail.incident.reference }} · Sentinel{% endblock %}
+{% block content %}
+<h1>{{ detail.incident.reference }} · {{ detail.incident.title }}</h1>
+<p>{{ detail.incident.dataset_slug }} · <strong>{{ detail.incident.status }}</strong> · <strong class="{{ detail.incident.severity }}">{{ detail.incident.severity }}</strong></p>
+<p>{{ detail.incident.description }}</p>
+<section>
+  <h2>Lifecycle</h2>
+  <form class="actions" action="/dashboard/incidents/{{ detail.incident.id }}/lifecycle" method="post">
+    <input name="reason" value="Operator action">
+    <button name="action" value="acknowledge">Acknowledge</button>
+    <button name="action" value="investigate">Investigate</button>
+    <button name="action" value="resolve">Resolve</button>
+    <button class="secondary" name="action" value="reopen">Reopen</button>
+    <button class="secondary" name="action" value="note">Add note</button>
+  </form>
+</section>
+<section><h2>Manual severity adjustment</h2><form action="/dashboard/incidents/{{ detail.incident.id }}/severity" method="post"><label>Severity<select name="severity">{% for value in ["CRITICAL","HIGH","MEDIUM","LOW","INFORMATIONAL"] %}<option {{ "selected" if detail.incident.severity == value else "" }}>{{ value }}</option>{% endfor %}</select></label><label>Reason<input name="reason" required></label><button>Record severity decision</button></form></section>
+<section>
+  <h2>Evidence ({{ detail.evidence|length }})</h2>
+  {% if detail.evidence %}
+  <table><tr><th>Source</th><th>Finding</th><th>Version</th><th>Columns</th><th>Evidence</th></tr>
+  {% for item in detail.evidence %}<tr><td>{{ item.source_type }}</td><td>{{ item.finding_type }}</td><td>{{ item.dataset_version_id }}</td><td>{{ item.affected_columns|join(", ") }}</td><td><pre>{{ item.metadata }}</pre></td></tr>{% endfor %}
+  </table>
+  {% else %}<p class="empty">No evidence recorded.</p>{% endif %}
+</section>
+<section>
+  <h2>Timeline</h2>
+  {% for event in detail.events %}<article><strong>{{ event.event_type }}</strong> · {{ event.occurred_at }} <pre>{{ event.details }}</pre></article>
+  {% else %}<p class="empty">No events recorded.</p>{% endfor %}
+</section>
+<section>
+  <h2>Deterministic investigation report</h2>
+  <h3>Observed facts and statistical evidence</h3>
+  {% for fact in report.observed_facts %}<p><strong>{{ fact.category }}</strong>: {{ fact.statement }}</p>{% endfor %}
+  <h3>Hypotheses</h3><ul>{% for item in report.hypotheses %}<li>{{ item }}</li>{% endfor %}</ul>
+  <h3>Missing evidence</h3><ul>{% for item in report.missing_evidence %}<li>{{ item }}</li>{% endfor %}</ul>
+</section>
+<section>
+  <h2>AI investigation (optional)</h2>
+  <form action="/dashboard/incidents/{{ detail.incident.id }}/ai" method="post">
+    <label>Investigation question<input name="question" value="Summarize verified evidence, hypotheses and uncertainty."></label>
+    <button>Queue investigation</button>
+  </form>
+  {% if request.query_params.get("ai") %}
+  <div hx-get="/dashboard/fragments/ai-investigations/{{ request.query_params.get('ai') }}" hx-trigger="load, every 4s" hx-swap="innerHTML"><p>AI investigation queued; loading persisted result…</p></div>
+  {% elif ai_result %}<div>{% with result=ai_result %}{% include "ai_result.html" %}{% endwith %}</div>{% endif %}
+</section>
+{% endblock %}

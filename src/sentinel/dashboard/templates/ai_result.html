@@ -1,0 +1,12 @@
+{% if result.status == "SUCCEEDED" and result.response %}
+<h3>Model explanation · {{ result.provider }} / {{ result.model }}</h3>
+<p><strong>Summary:</strong> {{ result.response.executive_summary }}</p>
+<h4>Verified observations</h4>
+<ul>{% for claim in result.response.observations %}<li>{{ claim.statement }} <small>Evidence: {{ claim.evidence_ids|join(", ") }}</small></li>{% else %}<li>No observations returned.</li>{% endfor %}</ul>
+<h4>Hypotheses</h4>
+<ul>{% for claim in result.response.hypotheses %}<li><strong>Hypothesis:</strong> {{ claim.statement }} <small>Evidence: {{ claim.evidence_ids|join(", ") }}</small></li>{% else %}<li>No hypotheses returned.</li>{% endfor %}</ul>
+<h4>Uncertainty and missing information</h4>
+<ul>{% for item in result.response.uncertainty %}<li>{{ item }}</li>{% else %}<li>None reported.</li>{% endfor %}</ul>
+<h4>Suggested next steps</h4><ul>{% for item in result.response.next_steps %}<li>{{ item }}</li>{% endfor %}</ul>
+{% elif result.status == "FAILED" %}<p role="alert">AI investigation failed ({{ result.failure_class }}): {{ result.failure_message }}</p>
+{% else %}<p>AI investigation {{ result.status|lower }}. This view refreshes automatically.</p>{% endif %}

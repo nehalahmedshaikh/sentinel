@@ -29,6 +29,15 @@ class SourceType(StrEnum):
     RELIABILITY = "reliability"
 
 
+class IncidentGenerationInput(BaseModel):
+    """Request persistent incident qualification for a completed assessment."""
+
+    model_config = ConfigDict(extra="forbid")
+    source_type: SourceType
+    assessment_id: UUID
+    policy_id: UUID
+
+
 class IncidentPolicyConfig(BaseModel):
     """Eligibility and conservative correlation/severity thresholds."""
 

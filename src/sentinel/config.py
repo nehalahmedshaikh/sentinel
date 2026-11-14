@@ -3,6 +3,10 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv(override=False)
+
 
 def database_url(*, testing: bool = False) -> str:
     """Return the configured database URL, failing clearly if absent."""

@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 from sentinel.config import database_url
 from sentinel.incidents import models as incident_models  # noqa: F401
+from sentinel.operations import models as operations_models  # noqa: F401
 from sentinel.persistence.models import Base
 from sentinel.quality import models as quality_models  # noqa: F401
 from sentinel.reliability import models as reliability_models  # noqa: F401
