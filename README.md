@@ -222,3 +222,46 @@ Migration `0004_incident_intelligence` adds incident policies, incidents, eviden
 - [ADR 0004: Incident Intelligence](docs/decisions/0004-incident-intelligence.md)
 - [Phase 5 specification](docs/PHASE_05_OPERATIONAL_PLATFORM_AND_AI.md)
 - [ADR 0005 — Operational Platform and AI](docs/decisions/0005-operational-platform-and-ai.md)
+
+## Project Status
+
+Sentinel is an implemented prototype of an autonomous data reliability and incident investigation platform. Its core application architecture and primary workflows are implemented. Development is currently paused following the completion of the initial operational platform.
+
+### Implemented capabilities
+
+- **Data ingestion:** CSV, Parquet, JSON and JSON Lines ingestion, dataset registration, content fingerprinting and immutable versioning.
+- **Data profiling:** Schema inference, statistical summaries and dataset profiling.
+- **Quality detection:** Configurable quality rules, including null checks, uniqueness, accepted values, ranges and duplicate detection.
+- **Reliability intelligence:** Schema drift, distribution drift, outlier detection and optional multivariate anomaly detection.
+- **Incident management:** Policy-driven incident generation, severity assignment, conservative correlation, evidence preservation and lifecycle management.
+- **Investigation:** Deterministic investigation reports, historical evidence and optional AI-assisted investigations.
+- **Operations:** FastAPI, PostgreSQL, Celery, Redis, scheduled jobs, persistent job tracking and recovery.
+- **Dashboard:** Server-rendered operator interface using Jinja2 and HTMX.
+- **Engineering:** SQLAlchemy, Alembic, Pydantic, Polars, pytest, Ruff and mypy.
+
+### Validation completed
+
+- Dataset ingestion and version creation.
+- Quality rule creation and persistence.
+- Successful quality assessments.
+- Detection of deliberately introduced duplicate identifiers and missing email values.
+- Evidence-backed quality findings.
+- Policy-driven generation of separate incidents from failed findings.
+- Incident acknowledgement, investigation notes and resolution.
+- Persistence of incident events and evidence.
+- API, worker and dashboard startup.
+
+### Known limitations and outstanding work
+
+1. Validate schema drift, distribution drift and anomaly detection against controlled datasets.
+2. Exercise scheduled monitoring and stale-job recovery under realistic conditions.
+3. Improve deterministic investigation reports so they communicate statistical evidence more effectively.
+4. Configure and evaluate a real AI provider, including investigation accuracy and evidence-grounding tests.
+5. Improve dashboard usability and operational error reporting.
+6. Review security and deployment requirements before any production or public deployment.
+
+The current implementation is local-first and is not hardened for public-internet deployment. AI functionality is optional and disabled by default.
+
+### Development roadmap
+
+Sentinel is currently paused. The outstanding items above are retained as a record of potential future development.
