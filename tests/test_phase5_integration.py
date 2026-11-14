@@ -172,7 +172,7 @@ def test_concurrent_schedule_dispatch_claims_occurrence_once(
 def test_duplicate_worker_delivery_executes_persisted_job_once(
     engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("SENTINEL_DATABASE_URL", str(engine.url))
+    monkeypatch.setenv("SENTINEL_DATABASE_URL", engine.url.render_as_string(hide_password=False))
     monkeypatch.setenv("SENTINEL_API_KEY", "phase-five-worker-test-secret")
     monkeypatch.setenv("SENTINEL_DATA_DIR", str(tmp_path))
     from sentinel.operations import tasks
@@ -207,7 +207,7 @@ def test_transient_failure_retry_and_stale_worker_recovery(
 ) -> None:
     from datetime import timedelta
 
-    monkeypatch.setenv("SENTINEL_DATABASE_URL", str(engine.url))
+    monkeypatch.setenv("SENTINEL_DATABASE_URL", engine.url.render_as_string(hide_password=False))
     monkeypatch.setenv("SENTINEL_API_KEY", "phase-five-worker-test-secret")
     monkeypatch.setenv("SENTINEL_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("SENTINEL_TASK_MAX_RETRIES", "2")
@@ -261,7 +261,7 @@ def test_dashboard_core_pages_render_against_persisted_services(
 ) -> None:
     dataset = _dataset(engine, tmp_path)
     settings = Settings(
-        database_url=str(engine.url),
+        database_url=engine.url.render_as_string(hide_password=False),
         data_dir=str(tmp_path / "dashboard-storage"),
         api_key="phase-five-dashboard-secret",
     )
@@ -313,7 +313,7 @@ def test_incident_policy_api_and_real_assessment_generation(engine: Engine, tmp_
         )
 
     settings = Settings(
-        database_url=str(engine.url),
+        database_url=engine.url.render_as_string(hide_password=False),
         data_dir=str(tmp_path),
         api_key="phase-five-policy-api-secret",
     )
@@ -462,7 +462,7 @@ def test_ai_investigation_persists_validated_evidence_references(
         assert generation.incidents
         incident_id = generation.incidents[0].id
         settings = Settings(
-            database_url=str(engine.url),
+            database_url=engine.url.render_as_string(hide_password=False),
             data_dir=str(tmp_path),
             api_key="phase-five-ai-test-secret",
             ai_enabled=True,
