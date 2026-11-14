@@ -210,18 +210,18 @@ Migration `0004_incident_intelligence` adds incident policies, incidents, eviden
 
 - [Project specification](docs/PROJECT_SPEC.md)
 - [Development setup](docs/DEVELOPMENT.md)
-- [Phase 1: Dataset foundation](docs/PHASE_01_DATASET_FOUNDATION.md)
+- [Phase 1](docs/PHASE_01_DATASET_FOUNDATION.md)
 - [Architecture decisions](docs/decisions/README.md)
 - [Initial architecture decisions](docs/decisions/0001-foundational-architecture.md)
 - [Coding agent instructions](AGENTS.md)
-- [Phase 2: Data quality detection](docs/PHASE_02_DATA_QUALITY.md)
+- [Phase 2](docs/PHASE_02_DATA_QUALITY.md)
 - [Data quality rule engine decision](docs/decisions/0002-data-quality-rule-engine.md)
-- [Phase 3: Data Reliability Intelligence](docs/PHASE_03_RELIABILITY_INTELLIGENCE.md)
-- [ADR 0003: Data Reliability Intelligence](docs/decisions/0003-reliability-intelligence.md)
-- [Phase 4: Incident Intelligence](docs/PHASE_04_INCIDENT_INTELLIGENCE.md)
-- [ADR 0004: Incident Intelligence](docs/decisions/0004-incident-intelligence.md)
-- [Phase 5 specification](docs/PHASE_05_OPERATIONAL_PLATFORM_AND_AI.md)
-- [ADR 0005 — Operational Platform and AI](docs/decisions/0005-operational-platform-and-ai.md)
+- [Phase 3](docs/PHASE_03_RELIABILITY_INTELLIGENCE.md)
+- [Data Reliability Intelligence](docs/decisions/0003-reliability-intelligence.md)
+- [Phase 4](docs/PHASE_04_INCIDENT_INTELLIGENCE.md)
+- [Incident Intelligence](docs/decisions/0004-incident-intelligence.md)
+- [Phase 5](docs/PHASE_05_OPERATIONAL_PLATFORM_AND_AI.md)
+- [Operational Platform and AI](docs/decisions/0005-operational-platform-and-ai.md)
 
 ## Project Status
 
